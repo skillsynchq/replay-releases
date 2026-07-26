@@ -3,13 +3,12 @@ set -eu
 
 REPO="skillsynchq/skl-releases"
 BINARY="skl"
-# Legacy install-dir override honored so existing docs/scripts keep working.
-INSTALL_DIR="${SKL_INSTALL_DIR:-${REPLAY_INSTALL_DIR:-$HOME/.local/bin}}"
+INSTALL_DIR="${SKL_INSTALL_DIR:-$HOME/.local/bin}"
 
 main() {
-    # An existing replay install counts: this is an upgrade, not a fresh
-    # setup, so skip the interactive init at the end.
-    if command -v "$BINARY" > /dev/null 2>&1 || command -v replay > /dev/null 2>&1; then
+    # An existing install means this is an upgrade, not a fresh setup,
+    # so skip the interactive init at the end.
+    if command -v "$BINARY" > /dev/null 2>&1; then
         already_installed=1
     else
         already_installed=0
@@ -21,6 +20,9 @@ main() {
     case "$os" in
         Linux)  target_os="unknown-linux-musl" ;;
         Darwin) target_os="apple-darwin" ;;
+        MINGW*|MSYS*|CYGWIN*)
+            err "On Windows, run this in PowerShell instead:
+  irm https://install.skillsync.com/install.ps1 | iex" ;;
         *)      err "Unsupported OS: $os" ;;
     esac
 
@@ -43,19 +45,14 @@ main() {
     tmpdir="$(mktemp -d)"
     trap 'rm -rf "$tmpdir"' EXIT
 
-    # Releases up to v0.16.x shipped replay-cli-v* archives containing a
-    # `replay` binary; v0.17.0+ ship skl-cli-v* containing `skl`. Try the
-    # new name first and fall back, so pinned old versions (and the window
-    # before the first skl release) still install.
     archive_dir="skl-cli-v${version}-${target}"
     archive="${archive_dir}.tar.gz"
-    if ! fetch "https://github.com/${REPO}/releases/download/${tag}/${archive}" "$tmpdir/$archive" 2>/dev/null; then
-        BINARY="replay"
-        archive_dir="replay-cli-v${version}-${target}"
-        archive="${archive_dir}.tar.gz"
-        fetch "https://github.com/${REPO}/releases/download/${tag}/${archive}" "$tmpdir/$archive" \
-            || err "Could not download ${tag} for ${target}"
-    fi
+    fetch "https://github.com/${REPO}/releases/download/${tag}/${archive}" "$tmpdir/$archive" \
+        || err "Could not download ${tag} for ${target}"
+    fetch "https://github.com/${REPO}/releases/download/${tag}/${archive}.sha256" "$tmpdir/$archive.sha256" \
+        || err "Could not download checksum for ${archive}"
+
+    verify_checksum "$tmpdir/$archive" "$tmpdir/$archive.sha256"
 
     echo "Installing ${BINARY} (${tag}) for ${target}"
     echo "Script source: https://github.com/${REPO}/blob/main/install.sh"
@@ -68,13 +65,6 @@ main() {
     chmod +x "$INSTALL_DIR/${BINARY}"
 
     echo "Installed ${BINARY} to ${INSTALL_DIR}/${BINARY}"
-
-    # The CLI used to be called replay. Point the old name at skl so
-    # muscle memory and existing scripts keep working.
-    if [ "$BINARY" = "skl" ] && [ -e "$INSTALL_DIR/replay" ] && [ ! -L "$INSTALL_DIR/replay" ]; then
-        ln -sf "$INSTALL_DIR/skl" "$INSTALL_DIR/replay"
-        echo "Replaced the old replay binary with a symlink to skl"
-    fi
 
     if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
         echo ""
@@ -108,6 +98,25 @@ get_latest_tag() {
             | grep '"tag_name"' | head -1 | sed 's/.*: "\(.*\)".*/\1/'
     else
         err "Neither curl nor wget found."
+    fi
+}
+
+verify_checksum() {
+    # Checksum files vary: some hold a bare hash, some "hash  filename".
+    # The first field is always the hash.
+    expected="$(awk '{print $1}' "$2")"
+    if command -v sha256sum > /dev/null 2>&1; then
+        actual="$(sha256sum "$1" | awk '{print $1}')"
+    elif command -v shasum > /dev/null 2>&1; then
+        actual="$(shasum -a 256 "$1" | awk '{print $1}')"
+    else
+        echo "Warning: no sha256sum or shasum found; skipping checksum verification" >&2
+        return 0
+    fi
+    if [ "$expected" != "$actual" ]; then
+        err "Checksum mismatch for $(basename "$1")
+  expected: $expected
+  actual:   $actual"
     fi
 }
 
