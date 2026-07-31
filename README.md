@@ -8,7 +8,7 @@ sessions.
 macOS / Linux:
 
 ```sh
-curl -sSfL https://install.skillsync.com | sh
+curl -sSfL https://install.skillsync.com/install.sh | sh
 ```
 
 Windows (PowerShell):
@@ -22,13 +22,13 @@ irm https://install.skillsync.com/install.ps1 | iex
 Install a specific version:
 
 ```sh
-VERSION=0.1.0 curl -sSfL https://install.skillsync.com | sh
+VERSION=0.1.0 curl -sSfL https://install.skillsync.com/install.sh | sh
 ```
 
 Install to a custom directory:
 
 ```sh
-SKL_INSTALL_DIR=/usr/local/bin curl -sSfL https://install.skillsync.com | sh
+SKL_INSTALL_DIR=/usr/local/bin curl -sSfL https://install.skillsync.com/install.sh | sh
 ```
 
 Both work in PowerShell too — set `$env:VERSION` or `$env:SKL_INSTALL_DIR` before running the installer.
