@@ -72,7 +72,11 @@ main() {
         echo "  export PATH=\"${INSTALL_DIR}:\$PATH\""
     fi
 
-    if [ "$already_installed" -eq 0 ]; then
+    # The init wizard is interactive (login prompt + selections, read from
+    # /dev/tty — stdin is the curl pipe). Skip it when there is no controlling
+    # terminal — CI, container/cloud setup scripts — or when the caller opts
+    # out with SKL_NO_INIT.
+    if [ "$already_installed" -eq 0 ] && [ -z "${SKL_NO_INIT:-}" ] && sh -c ': </dev/tty' 2>/dev/null; then
         echo ""
         echo "Running '${BINARY} init'..."
         "${INSTALL_DIR}/${BINARY}" init
