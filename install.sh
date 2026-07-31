@@ -3,7 +3,15 @@ set -eu
 
 REPO="skillsynchq/skl-releases"
 BINARY="skl"
-INSTALL_DIR="${SKL_INSTALL_DIR:-$HOME/.local/bin}"
+# Root installs (CI images, cloud environment setup scripts) default to a
+# system path so the binary is on every user's PATH; user installs stay in
+# the home directory. SKL_INSTALL_DIR overrides either.
+if [ "$(id -u)" -eq 0 ]; then
+    default_install_dir="/usr/local/bin"
+else
+    default_install_dir="$HOME/.local/bin"
+fi
+INSTALL_DIR="${SKL_INSTALL_DIR:-$default_install_dir}"
 
 main() {
     # An existing install means this is an upgrade, not a fresh setup,
