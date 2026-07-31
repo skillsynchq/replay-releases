@@ -46,6 +46,11 @@ main() {
         tag="v$VERSION"
     else
         tag="$(get_latest_tag)"
+        # An empty tag would otherwise cascade into a nonsense download URL.
+        case "$tag" in
+            v[0-9]*) ;;
+            *) err "Could not determine the latest release version" ;;
+        esac
     fi
 
     version="${tag#v}"
@@ -101,13 +106,17 @@ fetch() {
     fi
 }
 
+# Resolve the latest release tag from the /releases/latest web redirect
+# (…/releases/tag/vX.Y.Z). Deliberately avoids api.github.com: its
+# unauthenticated per-IP rate limit is permanently exhausted on shared
+# egress (CI runners, cloud VMs), which surfaces as a 403 and an empty tag.
 get_latest_tag() {
     if command -v curl > /dev/null 2>&1; then
-        curl -sSf "https://api.github.com/repos/${REPO}/releases/latest" \
-            | grep '"tag_name"' | head -1 | sed 's/.*: "\(.*\)".*/\1/'
+        curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/${REPO}/releases/latest" \
+            | sed 's#.*/tag/##'
     elif command -v wget > /dev/null 2>&1; then
-        wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" \
-            | grep '"tag_name"' | head -1 | sed 's/.*: "\(.*\)".*/\1/'
+        wget -q --max-redirect=0 -S -O /dev/null "https://github.com/${REPO}/releases/latest" 2>&1 \
+            | sed -n 's#.*[Ll]ocation: .*/tag/\([^ ]*\).*#\1#p' | head -1
     else
         err "Neither curl nor wget found."
     fi
